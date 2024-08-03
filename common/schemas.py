@@ -32,7 +32,7 @@ class LabelModel(BaseModel):
 
 class PricesModel(BaseModel):
     regular_price: float = Field(alias='regular')
-    sale_price: Optional[bool] = Field(alias='', default=None)
+    sale_price: Optional[float] = Field(alias='discount', default=None)
     promo_price: Optional[float] = Field(default=None, alias='cpd_promo_price')
 
 
@@ -40,7 +40,7 @@ class ProductModel(BaseModel):
     id: int = Field(alias='plu')
     name: str
     image_links: ImageLinks
-    rating: RatingModel
+    rating: Optional[RatingModel] = Field(default=None)
     prices: PricesModel
     property_clarification: str
     measurement_unit: str = Field(alias='uom')

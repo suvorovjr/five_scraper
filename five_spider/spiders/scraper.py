@@ -1,6 +1,7 @@
 import json
 from typing import Iterable
 from urllib.parse import urlencode
+from pydantic import ValidationError
 from common.schemas import CategoryModel, ProductsListModel
 from common.utils import get_headers, get_products_params, get_category_params
 from ..items import ProductItem
@@ -45,17 +46,22 @@ class ScraperSpider(scrapy.Spider):
                 method='GET',
                 headers=headers,
                 callback=self.parse_products,
-                meta={'category_name': subcategory.name}
+                meta={'category_name': subcategory.name},
             )
 
     def parse_products(self, response):
-        category_name = response.meta['category_name']
+        category_name = response.meta.get('category_name', 'unknown_category')
         try:
             response_data = response.json()
-        except json.JSONDecodeError:
-            self.logger.error(f"Ошибка ответа на запрос. Ответ сервера {response}")
+            products = ProductsListModel(**response_data)
+        except json.JSONDecodeError as e:
+            self.logger.error(f'JSONDecodeError: {e}. Retrying...')
+            yield response.request.replace(dont_filter=True)
             return
-        products = ProductsListModel(**response_data)
+        except ValidationError as e:
+            self.logger.error(f'ValidationError: {e}. Retrying...')
+            yield response.request.replace(dont_filter=True)
+            return
         for product in products.products:
             product_item = ProductItem()
             product_item['id'] = product.id
@@ -69,9 +75,12 @@ class ScraperSpider(scrapy.Spider):
             product_item['property_clarification'] = product.property_clarification
             product_item['measurement_unit'] = product.measurement_unit
             product_item['quantity'] = product.quantity
+            if product.labels is not None:
+                product_item['promo'] = product.labels[0].label
             yield product_item
         self.log_category(category_name)
 
     def log_category(self, category_name):
+        self.logger.info(f'Категория {category_name} успешно обработана.')
         with open('processed_categories.txt', 'a') as f:
             f.write(f'{category_name}\n')
